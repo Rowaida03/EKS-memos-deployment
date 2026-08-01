@@ -1,0 +1,154 @@
+import { Code, ConnectError } from "@connectrpc/connect";
+import { ArrowUpLeftFromCircleIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, Navigate, useLocation, useParams } from "react-router-dom";
+import MemoCommentSection from "@/components/MemoCommentSection";
+import { MentionResolutionProvider } from "@/components/MemoContent/MentionResolutionContext";
+import { MemoDetailSidebar, MemoDetailSidebarDrawer } from "@/components/MemoDetailSidebar";
+import MemoView from "@/components/MemoView";
+import MobileHeader from "@/components/MobileHeader";
+import { useAuth } from "@/contexts/AuthContext";
+import { useInstance } from "@/contexts/InstanceContext";
+import useMediaQuery from "@/hooks/useMediaQuery";
+import useMemoDetailError from "@/hooks/useMemoDetailError";
+import { useInfiniteMemoComments, useMemo } from "@/hooks/useMemoQueries";
+import { useSharedMemo, withShareAttachmentLinks } from "@/hooks/useMemoShareQueries";
+import { memoNamePrefix } from "@/lib/resource-names";
+import { cn } from "@/lib/utils";
+import type { Attachment } from "@/types/proto/api/v1/attachment_service_pb";
+
+const MemoDetail = () => {
+  const md = useMediaQuery("md");
+  const { isInitialized: authInitialized } = useAuth();
+  const { isInitialized: instanceInitialized } = useInstance();
+  const [shareImageDialogOpen, setShareImageDialogOpen] = useState(false);
+  const params = useParams();
+  const location = useLocation();
+  const { state: locationState, hash } = location;
+
+  // Detect share mode from the route parameter.
+  const shareToken = params.token;
+  const isShareMode = !!shareToken;
+
+  // Primary memo fetch — share token or direct name.
+  const memoNameFromParams = params.uid ? `${memoNamePrefix}${params.uid}` : "";
+  const {
+    data: memoFromDirect,
+    error: directError,
+    isLoading: directLoading,
+  } = useMemo(memoNameFromParams, { enabled: !isShareMode && !!memoNameFromParams });
+  const { data: memoFromShare, error: shareError, isLoading: shareLoading } = useSharedMemo(shareToken ?? "", { enabled: isShareMode });
+
+  const memo = isShareMode ? memoFromShare : memoFromDirect;
+  const error = isShareMode ? shareError : directError;
+  const isLoading = isShareMode ? shareLoading : directLoading;
+  const memoName = memo?.name ?? memoNameFromParams;
+
+  useMemoDetailError({
+    error: error as Error | null,
+  });
+
+  const { data: parentMemo } = useMemo(memo?.parent || "", {
+    enabled: !isShareMode && !!memo?.parent,
+  });
+
+  const {
+    data: comments = [],
+    fetchNextPage: fetchNextComments,
+    hasNextPage: hasNextComments,
+    isFetchingNextPage: isFetchingNextComments,
+  } = useInfiniteMemoComments(memoName, {
+    enabled: !isShareMode && !!memo,
+  });
+
+  // Scroll to the hash target once it's in the DOM. The effect re-runs as the memo loads (footnote
+  // anchors) and as comments arrive (comment anchors), since the target may render in either; the
+  // ref guards against re-scrolling the same hash on every later comments page-load.
+  const scrolledHashRef = useRef("");
+  useEffect(() => {
+    if (!hash || scrolledHashRef.current === hash) return;
+    const el = document.getElementById(decodeURIComponent(hash.slice(1)));
+    if (!el) return;
+    scrolledHashRef.current = hash;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [hash, memo, comments]);
+
+  if (isShareMode) {
+    const isNotFound = error instanceof ConnectError && (error.code === Code.NotFound || error.code === Code.Unauthenticated);
+    if (isNotFound || (!isLoading && !memo)) {
+      return <Navigate to="/404" replace />;
+    }
+  }
+
+  // Start the permitted requests as soon as routing is unlocked, but do not
+  // expose content before tag-blur and instance display settings settle.
+  if (isLoading || !memo || !authInitialized || !instanceInitialized) {
+    return null;
+  }
+
+  // In share mode, rewrite attachment URLs to include the share token for unauthenticated access.
+  const displayMemo = isShareMode
+    ? { ...memo, attachments: withShareAttachmentLinks(memo.attachments as Attachment[], shareToken!) }
+    : memo;
+  const mentionResolutionContents = [displayMemo.content, ...comments.map((comment) => comment.content)];
+  const userResolutionNames = Array.from(
+    new Set([displayMemo, ...comments].flatMap((item) => [item.creator, ...(item.reactions ?? []).map((reaction) => reaction.creator)])),
+  );
+
+  return (
+    <section className="@container w-full max-w-5xl min-h-full flex flex-col justify-start items-center sm:pt-3 md:pt-6 pb-8">
+      {!md && (
+        <MobileHeader>
+          <MemoDetailSidebarDrawer memo={displayMemo} onShareImageOpen={() => setShareImageDialogOpen(true)} />
+        </MobileHeader>
+      )}
+      <MentionResolutionProvider contents={mentionResolutionContents} userNames={userResolutionNames}>
+        <div className={cn("w-full flex flex-row justify-start items-start px-4 sm:px-6 gap-6")}>
+          <div className={cn("w-full md:w-[calc(100%-16.5rem)]")}>
+            {!isShareMode && parentMemo && (
+              <div className="w-auto inline-block mb-2">
+                <Link
+                  className="px-3 py-1 border border-border rounded-lg max-w-xs w-auto text-sm flex flex-row justify-start items-center flex-nowrap text-muted-foreground hover:shadow hover:opacity-80"
+                  to={`/${parentMemo.name}`}
+                  state={locationState}
+                  viewTransition
+                >
+                  <ArrowUpLeftFromCircleIcon className="w-4 h-auto shrink-0 opacity-60 mr-2" />
+                  <span className="truncate">{parentMemo.content}</span>
+                </Link>
+              </div>
+            )}
+            <MemoView
+              key={`${displayMemo.name}-${displayMemo.updateTime}`}
+              memo={displayMemo}
+              compact={false}
+              parentPage={locationState?.from}
+              shareImageDialogOpen={shareImageDialogOpen}
+              showCreator
+              showVisibility
+              showPinned
+              onShareImageDialogOpenChange={setShareImageDialogOpen}
+            />
+            {!isShareMode && (
+              <MemoCommentSection
+                memo={displayMemo}
+                comments={comments}
+                parentPage={locationState?.from}
+                hasMoreComments={hasNextComments}
+                isFetchingMoreComments={isFetchingNextComments}
+                onLoadMoreComments={fetchNextComments}
+              />
+            )}
+          </div>
+          {md && (
+            <div className="sticky top-0 left-0 shrink-0 -mt-6 w-60 h-full">
+              <MemoDetailSidebar className="py-6" memo={displayMemo} onShareImageOpen={() => setShareImageDialogOpen(true)} />
+            </div>
+          )}
+        </div>
+      </MentionResolutionProvider>
+    </section>
+  );
+};
+
+export default MemoDetail;

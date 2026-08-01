@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package memos.store;
+
+import "google/protobuf/timestamp.proto";
+import "google/type/color.proto";
+
+option go_package = "gen/store";
+
+message UserSetting {
+  enum Key {
+    KEY_UNSPECIFIED = 0;
+    // General user settings.
+    GENERAL = 1;
+    // The shortcuts of the user.
+    SHORTCUTS = 4;
+    // The webhooks of the user.
+    WEBHOOKS = 5;
+    // Refresh tokens for the user.
+    REFRESH_TOKENS = 6;
+    // Personal access tokens for the user.
+    PERSONAL_ACCESS_TOKENS = 7;
+    // Per-user tag metadata.
+    TAGS = 8;
+  }
+
+  int32 user_id = 1;
+
+  Key key = 2;
+  oneof value {
+    GeneralUserSetting general = 3;
+    ShortcutsUserSetting shortcuts = 6;
+    WebhooksUserSetting webhooks = 7;
+    RefreshTokensUserSetting refresh_tokens = 8;
+    PersonalAccessTokensUserSetting personal_access_tokens = 9;
+    TagsUserSetting tags = 10;
+  }
+}
+
+message GeneralUserSetting {
+  // The user's locale.
+  string locale = 1;
+  // The user's memo visibility setting.
+  string memo_visibility = 2;
+  // The user's theme preference.
+  // This references a CSS file in the web/public/themes/ directory.
+  string theme = 3;
+}
+
+message UserTagMetadata {
+  // Optional background color for the tag label.
+  // When unset, the default tag color is used.
+  google.type.Color background_color = 1;
+  // Whether memos with this tag should have their content blurred.
+  bool blur_content = 2;
+}
+
+message TagsUserSetting {
+  // Map of tag name pattern to tag metadata.
+  // Each key is treated as an anchored regular expression (^pattern$),
+  // so a single entry like "project/.*" matches all tags under that prefix.
+  // Exact tag names are also valid.
+  map<string, UserTagMetadata> tags = 1;
+}
+
+message RefreshTokensUserSetting {
+  message RefreshToken {
+    // Unique identifier (matches 'tid' claim in JWT)
+    string token_id = 1;
+    // When the token expires
+    google.protobuf.Timestamp expires_at = 2;
+    // When the token was created
+    google.protobuf.Timestamp created_at = 3;
+    // Client information for session management UI
+    ClientInfo client_info = 4;
+    // Optional description
+    string description = 5;
+  }
+
+  message ClientInfo {
+    // User agent string of the client.
+    string user_agent = 1;
+    // IP address of the client.
+    string ip_address = 2;
+    // Optional. Device type (e.g., "mobile", "desktop", "tablet").
+    string device_type = 3;
+    // Optional. Operating system (e.g., "iOS 17.0", "Windows 11").
+    string os = 4;
+    // Optional. Browser name and version (e.g., "Chrome 119.0").
+    string browser = 5;
+  }
+
+  repeated RefreshToken refresh_tokens = 1;
+}
+
+message PersonalAccessTokensUserSetting {
+  message PersonalAccessToken {
+    // Unique identifier for this token
+    string token_id = 1;
+    // SHA-256 hash of the actual token
+    string token_hash = 2;
+    // User-provided description
+    string description = 3;
+    // When the token expires (null = never)
+    google.protobuf.Timestamp expires_at = 4;
+    // When the token was created
+    google.protobuf.Timestamp created_at = 5;
+    // When the token was last used
+    google.protobuf.Timestamp last_used_at = 6;
+  }
+  repeated PersonalAccessToken tokens = 1;
+}
+
+message ShortcutsUserSetting {
+  message Shortcut {
+    string id = 1;
+    string title = 2;
+    string filter = 3;
+  }
+  repeated Shortcut shortcuts = 1;
+}
+
+message WebhooksUserSetting {
+  message Webhook {
+    // Unique identifier for the webhook
+    string id = 1;
+    // Descriptive title for the webhook
+    string title = 2;
+    // The webhook URL endpoint
+    string url = 3;
+    // Optional signing secret for webhook authentication.
+    string signing_secret = 4;
+  }
+  repeated Webhook webhooks = 1;
+}

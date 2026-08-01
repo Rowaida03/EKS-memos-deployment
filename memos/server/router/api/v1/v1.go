@@ -1,0 +1,161 @@
+package v1
+
+import (
+	"context"
+	"net/http"
+
+	"connectrpc.com/connect"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/labstack/echo/v5"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/semaphore"
+
+	"github.com/usememos/memos/internal/markdown"
+	"github.com/usememos/memos/internal/profile"
+	v1pb "github.com/usememos/memos/proto/gen/api/v1"
+	"github.com/usememos/memos/server/auth"
+	"github.com/usememos/memos/server/notification"
+	"github.com/usememos/memos/store"
+)
+
+// MaxAPIRequestBytes caps the size of a request body accepted by the API. The
+// in-process MCP endpoint forwards every tool call through these same routes, so
+// it derives its own limit from this constant to keep the two gates in lockstep.
+const MaxAPIRequestBytes = 256 << 20
+
+type APIV1Service struct {
+	v1pb.UnimplementedInstanceServiceServer
+	v1pb.UnimplementedAuthServiceServer
+	v1pb.UnimplementedUserServiceServer
+	v1pb.UnimplementedMemoServiceServer
+	v1pb.UnimplementedAttachmentServiceServer
+	v1pb.UnimplementedAIServiceServer
+	v1pb.UnimplementedShortcutServiceServer
+	v1pb.UnimplementedIdentityProviderServiceServer
+
+	Secret                  string
+	Profile                 *profile.Profile
+	Store                   *store.Store
+	MarkdownService         markdown.Service
+	SSEHub                  *SSEHub
+	NotificationEmailSender notification.EmailSender
+
+	// thumbnailSemaphore limits concurrent thumbnail generation to prevent memory exhaustion
+	thumbnailSemaphore       *semaphore.Weighted
+	imageProcessingSemaphore *semaphore.Weighted
+
+	// instanceStatsCache memoizes GetInstanceStats results for instanceStatsCacheTTL.
+	instanceStatsCache instanceStatsCache
+}
+
+func NewAPIV1Service(secret string, profile *profile.Profile, store *store.Store) *APIV1Service {
+	markdownService := markdown.NewService(
+		markdown.WithTagExtension(),
+		markdown.WithMentionExtension(),
+	)
+	return &APIV1Service{
+		Secret:                   secret,
+		Profile:                  profile,
+		Store:                    store,
+		MarkdownService:          markdownService,
+		SSEHub:                   NewSSEHub(),
+		NotificationEmailSender:  nil,
+		thumbnailSemaphore:       semaphore.NewWeighted(3), // Limit to 3 concurrent thumbnail generations
+		imageProcessingSemaphore: semaphore.NewWeighted(2),
+	}
+}
+
+// RegisterGateway registers the gRPC-Gateway and Connect handlers with the given Echo instance.
+func (s *APIV1Service) RegisterGateway(ctx context.Context, echoServer *echo.Echo) error {
+	// Shared authorizer: one source of truth for authentication and anonymous-access
+	// policy, used by both the gRPC-Gateway middleware and the Connect interceptor.
+	authorizer := NewAuthorizer(s.Store, s.Secret, s.Profile)
+
+	// grpc-gateway does not hand the matched procedure to middleware:
+	// runtime.RPCMethod is only populated by the generated handler, which runs
+	// after middleware. Resolve the procedure from the proto HTTP bindings
+	// instead so the policy check actually runs on this transport.
+	routeResolver, err := newGatewayRouteResolver()
+	if err != nil {
+		return errors.Wrap(err, "failed to build gateway route resolver")
+	}
+
+	gatewayAuthMiddleware := func(next runtime.HandlerFunc) runtime.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
+			ctx := r.Context()
+
+			authHeader := r.Header.Get("Authorization")
+			result := authorizer.Authenticate(ctx, authHeader)
+
+			// An unresolved path yields an empty procedure, which CheckAccess
+			// treats as protected: authenticated callers pass and anonymous ones
+			// are refused. Failing closed keeps a routing gap from becoming an
+			// access-control gap.
+			procedure, _ := routeResolver.resolveRequest(r)
+			if err := authorizer.CheckAccess(ctx, procedure, result); err != nil {
+				http.Error(w, `{"code": 16, "message": "authentication required"}`, http.StatusUnauthorized)
+				return
+			}
+
+			// Apply the identity to the context (no-op for permitted anonymous requests).
+			if result != nil {
+				r = r.WithContext(auth.ApplyToContext(ctx, result))
+			}
+
+			next(w, r, pathParams)
+		}
+	}
+
+	// Create gRPC-Gateway mux with auth middleware.
+	gwMux := runtime.NewServeMux(
+		runtime.WithMiddlewares(gatewayAuthMiddleware),
+	)
+	if err := v1pb.RegisterInstanceServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return err
+	}
+	if err := v1pb.RegisterAuthServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return err
+	}
+	if err := v1pb.RegisterUserServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return err
+	}
+	if err := v1pb.RegisterMemoServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return err
+	}
+	if err := v1pb.RegisterAttachmentServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return err
+	}
+	if err := v1pb.RegisterAIServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return err
+	}
+	if err := v1pb.RegisterShortcutServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return err
+	}
+	if err := v1pb.RegisterIdentityProviderServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return err
+	}
+	gwGroup := echoServer.Group("")
+	// Register SSE endpoint with same CORS as rest of /api/v1.
+	RegisterSSERoutes(gwGroup, s.SSEHub, s.Store, s.Secret)
+	handler := echo.WrapHandler(http.MaxBytesHandler(gwMux, MaxAPIRequestBytes))
+
+	gwGroup.Any("/api/v1/*", handler)
+	gwGroup.Any("/file/*", handler)
+
+	// Connect handlers for browser clients (replaces grpc-web).
+	logStacktraces := s.Profile.Demo
+	connectInterceptors := connect.WithInterceptors(
+		NewMetadataInterceptor(), // Convert HTTP headers to gRPC metadata first
+		NewLoggingInterceptor(logStacktraces),
+		NewRecoveryInterceptor(logStacktraces),
+		NewAuthInterceptor(authorizer),
+	)
+	connectMux := http.NewServeMux()
+	connectHandler := NewConnectServiceHandler(s)
+	connectHandler.RegisterConnectHandlers(connectMux, connectInterceptors, connect.WithReadMaxBytes(MaxAPIRequestBytes))
+
+	connectGroup := echoServer.Group("")
+	connectGroup.Any("/memos.api.v1.*", echo.WrapHandler(http.MaxBytesHandler(connectMux, MaxAPIRequestBytes)))
+
+	return nil
+}
