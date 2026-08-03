@@ -9,5 +9,8 @@ locals {
         Application = "memos"
         Project = "eks-memos"
         Owner = "rowaida"
+        Terraform = "true"
     }
+
+    cluster_name = "eks-cluster"
 }
