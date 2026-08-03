@@ -12,7 +12,7 @@ resource "aws_s3_bucket_versioning" "tf_state" {
   bucket = aws_s3_bucket.tf_state.id
 
   versioning_configuration {
-    status = "Enabled"
+    status = "Enabled"  # tracks and records versions so you can rollback if necessary 
   }
 }
 
