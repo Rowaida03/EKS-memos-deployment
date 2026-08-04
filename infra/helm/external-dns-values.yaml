@@ -1,0 +1,17 @@
+sources:
+  - ingress
+  - service
+provider:
+  name: aws 
+aws:
+  region: eu-west-2
+  zoneType: public
+serviceAccount:
+  create: true
+  name: external-dns
+  annotations:
+  eks.amazonaws.com/role-arn: ${role_arn}
+domainFilters:
+  - rowaida.memos.co.uk
+policy: sync
+txtOwnerId: eks-cluster
