@@ -28,13 +28,13 @@ resource "helm_release" "external-dns" {
 }
 
 resource "helm_release" "traefik" {
-    name = "traefik"
-    repository = "https://traefik.github.io/charts"
-    chart = "traefik"
-    namespace = "traefik"
-    create_namespace = true
+  name             = "traefik"
+  repository       = "https://traefik.github.io/charts"
+  chart            = "traefik"
+  namespace        = "traefik"
+  create_namespace = true
 
-    values = [
-        file("${path.module}/helm/traefik-values.yaml")
-    ]
+  values = [
+    file("${path.module}/helm/traefik-values.yaml")
+  ]
 }
