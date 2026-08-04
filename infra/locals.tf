@@ -1,6 +1,6 @@
 locals {
   name   = "eks"
-  domain = "rowaida.memos.co.uk"
+  domain = "memos-rowaida.co.uk"
   region = "eu-west-2" # London region
 
 

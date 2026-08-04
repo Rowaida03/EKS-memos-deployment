@@ -12,7 +12,7 @@ module "eks" {
   # restrict to your own ip 
   endpoint_private_access = true # the api server is also reachable from inside the VPC 
 
-  vpc_id                   = module.vpc.id
+  vpc_id                   = module.vpc.vpc_id
   subnet_ids               = module.vpc.private_subnets
   control_plane_subnet_ids = module.vpc.public_subnets
 

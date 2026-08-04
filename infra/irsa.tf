@@ -6,11 +6,11 @@ module "cert_manager_irsa_role" {
 
   name                          = "cert-manager"
   attach_cert_manager_policy    = true
-  cert_manager_hosted_zone_arns = ["your website to be hosted zone arn"]
+  cert_manager_hosted_zone_arns = ["arn:aws:route53:::hostedzone/Z00447721POISBCRRHYI6"]
 
   oidc_providers = {
     eks = {
-      provider_arn               = module.eks.oidc_providers_arn
+      provider_arn               = module.eks.oidc_provider_arn
       namespace_service_accounts = ["cert-manager:cert-manager"] # namespace:service 
     }
   }
@@ -25,7 +25,7 @@ module "external_dns_irsa_role" {
 
   name                          = "external-dns"
   attach_external_dns_policy    = true
-  external_dns_hosted_zone_arns = ["your website to be hosted zone arn"]
+  external_dns_hosted_zone_arns = ["arn:aws:route53:::hostedzone/Z00447721POISBCRRHYI6"]
 
   oidc_providers = {
     eks = {
