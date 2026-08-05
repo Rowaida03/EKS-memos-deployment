@@ -29,6 +29,18 @@ module "eks" {
     }
 
   }
-
+ access_entries = {
+    github_actions = {
+      principal_arn = aws_iam_role.github_ecr_pusher.arn
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
   tags = local.tags
 }
