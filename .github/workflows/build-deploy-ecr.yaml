@@ -1,0 +1,100 @@
+name: Build, Scan, Push & Deploy
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-2
+  AWS_ACCOUNT_ID: "405466951600"
+  ECR_REPO: memos
+  EKS_CLUSTER_NAME: eks
+  K8S_NAMESPACE: default
+  K8S_DEPLOYMENT: memos-deployment
+
+jobs:
+  build-scan-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_uri: ${{ steps.meta.outputs.IMAGE_URI }}
+      image_tag: ${{ steps.meta.outputs.IMAGE_TAG }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/github-ecr-pusher
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Compute image coordinates
+        id: meta
+        run: |
+          echo "IMAGE_URI=${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPO }}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (load locally for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.IMAGE_URI }}:${{ steps.meta.outputs.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.meta.outputs.IMAGE_URI }}:${{ steps.meta.outputs.IMAGE_TAG }}
+          severity: CRITICAL,HIGH
+          exit-code: 0
+
+      - name: Push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.IMAGE_URI }}:latest
+            ${{ steps.meta.outputs.IMAGE_URI }}:${{ steps.meta.outputs.IMAGE_TAG }}
+          cache-from: type=gha
+
+      - name: Summary
+        run: |
+          echo "Image (latest): ${{ steps.meta.outputs.IMAGE_URI }}:latest"
+          echo "Image (sha):    ${{ steps.meta.outputs.IMAGE_URI }}:${{ steps.meta.outputs.IMAGE_TAG }}"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-scan-push
+    steps:
+      - name: Configure AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/github-ecr-pusher
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+
+      - name: Deploy new image
+        run: |
+          kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} \
+            memos=${{ needs.build-scan-push.outputs.image_uri }}:${{ needs.build-scan-push.outputs.image_tag }} \
+            -n ${{ env.K8S_NAMESPACE }}
+          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} -n ${{ env.K8S_NAMESPACE }}
