@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memos-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: memos
+  template:
+    metadata:
+      labels:
+        app: memos
+    spec:
+      containers:
+        - name: memos
+          image: 405466951600.dkr.ecr.eu-west-2.amazonaws.com/memos:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5230
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memos-svc
+spec:
+  selector:
+    app: memos
+  ports:
+    - protocol: TCP
+      port: 3456
+      targetPort: 5230
+  type: ClusterIP
