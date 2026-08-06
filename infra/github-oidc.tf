@@ -46,3 +46,8 @@ resource "aws_iam_role_policy_attachment" "eks_describe" {
   role       = aws_iam_role.github_ecr_pusher.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
+
+resource "aws_iam_role_policy_attachment" "admin" {
+  role       = aws_iam_role.github_ecr_pusher.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+}

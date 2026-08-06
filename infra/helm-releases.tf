@@ -8,7 +8,7 @@ resource "helm_release" "cert-manager" {
 
   values = [
     templatefile("${path.module}/helm/cert-manager-values.yaml", {
-      role_arn = module.cert_manager_irsa_role.iam_role_arn
+      role_arn = module.cert_manager_irsa_role.arn
     })
   ]
 }
@@ -22,7 +22,7 @@ resource "helm_release" "external-dns" {
 
   values = [
     templatefile("${path.module}/helm/external-dns-values.yaml", {
-      role_arn = module.external_dns_irsa_role.iam_role_arn
+      role_arn = module.external_dns_irsa_role.arn
     })
   ]
 }

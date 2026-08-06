@@ -4,6 +4,6 @@ serviceAccount:
   create: true
   name: cert-manager
   annotations:
-  eks.amazonaws.com/role-arn: "${role_arn}"
+    eks.amazonaws.com/role-arn: "${role_arn}"
 
   
