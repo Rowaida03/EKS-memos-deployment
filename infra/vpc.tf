@@ -14,13 +14,13 @@ module "vpc" {
   enable_dns_hostnames = true
 
   public_subnet_tags = {
-    "kubernetes.io/cluster/${local.name}" = "shared" # Your ALB living in a public subnet ↔ same role as the elb-tagged public subnet here.
-    "kubernetes.io/role/elb"              = 1
+    "kubernetes.io/cluster/${local.cluster_name}" = "shared" # Your ALB living in a public subnet ↔ same role as the elb-tagged public subnet here.
+    "kubernetes.io/role/elb"                      = 1
   }
 
   private_subnet_tags = {
-    "kubernetes.io/cluster/${local.name}" = "shared" # Your route table connecting things to the private subnet ↔ same role as the internal-elb-tagged private subnet here,
-    "kubernetes.io/role/internal-elb"     = 1
+    "kubernetes.io/cluster/${local.cluster_name}" = "shared" # Your route table connecting things to the private subnet ↔ same role as the internal-elb-tagged private subnet here,
+    "kubernetes.io/role/internal-elb"             = 1
   }
 
   tags = local.tags

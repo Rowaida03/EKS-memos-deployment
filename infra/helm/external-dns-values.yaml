@@ -10,8 +10,8 @@ serviceAccount:
   create: true
   name: external-dns
   annotations:
-  eks.amazonaws.com/role-arn: ${role_arn}
+    eks.amazonaws.com/role-arn: ${role_arn}
 domainFilters:
-  - rowaida.memos.co.uk
+  - memos-rowaida.co.uk
 policy: sync
 txtOwnerId: eks-cluster

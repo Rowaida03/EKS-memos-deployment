@@ -23,8 +23,8 @@ module "eks" {
       most_recent = true
     }
     vpc-cni = {
-      most_recent = true
-      before_compute = true 
+      most_recent    = true
+      before_compute = true
     }
   }
 
@@ -34,8 +34,8 @@ module "eks" {
       instance_types = ["t2.micro", "t3.micro"]
 
       min_size     = 3
-      max_size     = 6
-      desired_size = 5
+      max_size     = 10
+      desired_size = 7
     }
   }
 

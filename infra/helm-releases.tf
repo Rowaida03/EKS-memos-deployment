@@ -33,8 +33,41 @@ resource "helm_release" "traefik" {
   chart            = "traefik"
   namespace        = "traefik"
   create_namespace = true
+  depends_on       = [helm_release.aws_load_balancer_controller]
 
   values = [
     file("${path.module}/helm/traefik-values.yaml")
+  ]
+}
+
+
+resource "helm_release" "aws_load_balancer_controller" {
+  name       = "aws-load-balancer-controller"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  namespace  = "kube-system"
+
+  set = [
+    {
+      name  = "clusterName"
+      value = "eks-cluster"
+    },
+
+    {
+      name  = "vpcId"
+      value = module.vpc.vpc_id
+    },
+    {
+      name  = "serviceAccount.create"
+      value = "true"
+    },
+    {
+      name  = "serviceAccount.name"
+      value = "aws-load-balancer-controller"
+    },
+    {
+      name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+      value = module.lb_controller_irsa_role.arn
+    }
   ]
 }
