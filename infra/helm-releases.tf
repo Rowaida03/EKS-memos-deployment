@@ -71,3 +71,20 @@ resource "helm_release" "aws_load_balancer_controller" {
     }
   ]
 }
+
+resource "helm_release" "argocd" {
+  name             = "argocd"
+  repository       = "https://argoproj.github.io/argo-helm"
+  chart            = "argo-cd"
+  namespace        = "argocd"
+  create_namespace = true
+
+  set = [
+    {
+      name = "dex.enabled"
+      value = "false"
+    }
+  ]
+    
+
+}
