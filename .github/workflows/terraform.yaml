@@ -27,12 +27,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+
+
       - name: Checkov scan
         uses: bridgecrewio/checkov-action@master
         with:
           directory: infra
           quiet: true
           soft_fail: true
+          output_format: sarif
+          output_file_path: checkov.sarif
+
+
+      - name: Upload Checkov SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
 
       - name: Configure AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
