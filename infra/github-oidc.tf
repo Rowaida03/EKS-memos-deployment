@@ -26,14 +26,8 @@ data "aws_iam_policy_document" "github_trust" {
 
     condition {
       test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:repository"
-      values   = ["Rowaida03/EKS-memos-deployment"]
-    }
-
-    condition {
-      test     = "StringLike"
-      variable = "token.actions.githubusercontent.com:job_workflow_ref"
-      values   = ["Rowaida03/EKS-memos-deployment/.github/workflows/*"]
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:Rowaida03@217655376/EKS-memos-deployment@1319383509:ref:refs/heads/master"]
     }
   }
 }

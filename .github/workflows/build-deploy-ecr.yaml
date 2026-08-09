@@ -13,7 +13,7 @@ env:
   AWS_REGION: eu-west-2
   AWS_ACCOUNT_ID: "405466951600"
   ECR_REPO: memos
-  EKS_CLUSTER_NAME: eks
+  EKS_CLUSTER_NAME: eks-cluster
   K8S_NAMESPACE: default
   K8S_DEPLOYMENT: memos-deployment
 
