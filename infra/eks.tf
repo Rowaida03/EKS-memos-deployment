@@ -31,11 +31,11 @@ module "eks" {
   eks_managed_node_groups = {
     workers = {
       disk_size      = 50
-      instance_types = ["t3.small", "t3.micro"]
+      instance_types = ["m7i-flex.large"]
 
       min_size     = 2
-      max_size     = 6
-      desired_size = 4
+      max_size     = 4
+      desired_size = 2
     }
   }
 

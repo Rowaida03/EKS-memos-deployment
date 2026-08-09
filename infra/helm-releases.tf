@@ -81,7 +81,7 @@ resource "helm_release" "argocd" {
 
   set = [
     {
-      name = "dex.enabled"
+      name  = "dex.enabled"
       value = "false"
     }
   ]
@@ -96,7 +96,7 @@ resource "helm_release" "monitoring" {
   create_namespace = true
 
   set = [{
-    name = "prometheus-node-exporter.enabled"
+    name  = "prometheus-node-exporter.enabled"
     value = "false"
   }]
 }

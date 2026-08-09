@@ -25,13 +25,18 @@ data "aws_iam_policy_document" "github_trust" {
     }
 
     condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:repository"
+      values   = ["Rowaida03/EKS-memos-deployment"]
+    }
+
+    condition {
       test     = "StringLike"
-      variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:Rowaida03/EKS-memos-deployment:*"]
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = ["Rowaida03/EKS-memos-deployment/.github/workflows/*"]
     }
   }
 }
-
 resource "aws_iam_role" "github_ecr_pusher" {
   name               = "github-ecr-pusher"
   assume_role_policy = data.aws_iam_policy_document.github_trust.json
