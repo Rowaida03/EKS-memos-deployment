@@ -6,3 +6,22 @@ A production style deployment of memos on Amazon EKS, built with Terraform, secu
 
 Memos is an open-source note-taking app 
 
+![Architecture diagram](images/Memos_eks.drawio.png)
+
+
+![Memos running on EKS](images/memos-application.png)
+
+
+# Workflows
+
+![Terraform workflow](images/terraform-workflow.png)
+
+![Build and Push Workflow](images/build-scan-push-workflow.png)
+
+# Dashboards
+
+![ArgoCD](images/argocd-health.png)
+
+![Grafana](images/grafana-metrics.png)
+
+
