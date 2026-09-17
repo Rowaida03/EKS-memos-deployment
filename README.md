@@ -9,10 +9,10 @@ A production style deployment of memos, an open-source note taking application, 
 Everything in infra/ and kubernetes/ targets a real EKS cluster, but the app itself can be run entirely on your own machine with just Docker.
 
 ### Option A - plain Docker
-'''
+```
 docker build -t memos-local -f Dockerfile .
 docker run -d --name memos -p 5230:5230 -v ~/.memos:/var/opt/memos
-'''
+```
 Then open http://localhost:5230 and create the admin account.
 
  The -v flag persists your data in ~/.memos on your host, so it survives container restarts (unlike the ephemeral setup used on EKS in this project. See tradeoffs).  *****!!!make it tap
@@ -99,7 +99,7 @@ Then open http://localhost:5230 and create the admin account.
 
 - terraform-aws-modules/vpc/aws, 3 AZs, public + private subnets.
 - Single NAT gateway - see tradeoffs below !!!!! make that underlined
-- Public subnets tagged 'kubernetes.io/role/elb', private tagged 'kubernetes.io/role/internal-elb', both tagged 'kubernetes.io/cluster/<cluster-name>' - required for automatic load balancer subnet discovery. 
+- Public subnets tagged `kubernetes.io/role/elb`, private tagged `kubernetes.io/role/internal-elb`, both tagged `kubernetes.io/cluster/<cluster-name>` - required for automatic load balancer subnet discovery. 
 
 
 
