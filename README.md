@@ -29,20 +29,21 @@ Then open http://localhost:5230 and create the admin account.
 - Problems faced & solutions
 - Known limitations/ improvements to be made
 
+### Architecture diagram
 
 ![Architecture diagram](images/Memos_eks.drawio.png)
 
 **Request flow**: Browser→Route53(DNS)→NLB→Traefik Ingress→memos-svc→memos-deployment pods. TLS is terminated by traefik using a certificate issued by cert-manager via Let's Encrypt (DNS-01 challenge through Route53).
 
 
-## Tech Stack
+### Tech Stack
 
 | Layer | Tool | Why |
 |---|---|---|
-| IaC | Terraform (`terraform-aws-modules/vpc`, `.../eks`, `.../iam`) | Reusable, well-maintained community modules instead of hand-rolled resources |
+| IaC | Terraform (`terraform-aws-modules/vpc`, `.../eks`, `.../iam`) | Reusable, well-maintained community modules |
 | Container orchestration | Amazon EKS 1.33 | Managed control plane |
-| Ingress | Traefik | Spec requirement (originally NGINX, spec was updated to Traefik) |
-| Load balancing | AWS Load Balancer Controller (NLB) | See tradeoffs — the legacy in-tree controller does not reliably support this EKS version |
+| Ingress | Traefik | Routes incoming HTTP/S traffic to the right Kubernetes Service |
+| Load balancing | AWS Load Balancer Controller (NLB) | Provisions and manages the real AWS load balancer that sits in front of Traefik, exposing it to the internet |
 | TLS | cert-manager + Let's Encrypt | Free, auto-renewing certs, DNS-01 challenge via Route53 |
 | DNS | external-dns + Route53 | Ingress changes automatically create/update DNS records |
 | IAM for pods | IRSA (IAM Roles for Service Accounts) | Least-privilege AWS access per component, no static credentials in-cluster |
@@ -51,7 +52,7 @@ Then open http://localhost:5230 and create the admin account.
 | Image scanning | Trivy | Vulnerability scanning of the built image before push |
 | IaC scanning | Checkov | Static analysis of Terraform for misconfigurations |
 | Registry | Amazon ECR | Private, IAM-authenticated registry integrated with EKS |
-| Monitoring | kube-prometheus-stack (Prometheus + Grafana + Alertmanager) | Cluster and workload metrics, pre-built dashboards |
+| Monitoring | kube-prometheus-stack (Prometheus + Grafana) | Cluster and workload metrics, pre-built dashboards |
 | App | [usememos/memos](https://github.com/usememos/memos) | Self-hosted note-taking app, SQLite-backed |
 
 ![Memos running on EKS](images/memos-application.png)
