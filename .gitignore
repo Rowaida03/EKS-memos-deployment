@@ -20,4 +20,4 @@ override.tf.json
 
 # CLI config
 .terraformrc
-terraform.rc
+terraform.rc*.code-workspace
