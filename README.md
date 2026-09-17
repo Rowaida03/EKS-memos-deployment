@@ -37,13 +37,22 @@ Then open http://localhost:5230 and create the admin account.
 
 ## Tech Stack
 
-|Layer    |
-|---------|
-|container orchestration|
-|Ingress
-|
-|
-
+| Layer | Tool | Why |
+|---|---|---|
+| IaC | Terraform (`terraform-aws-modules/vpc`, `.../eks`, `.../iam`) | Reusable, well-maintained community modules instead of hand-rolled resources |
+| Container orchestration | Amazon EKS 1.33 | Managed control plane |
+| Ingress | Traefik | Spec requirement (originally NGINX, spec was updated to Traefik) |
+| Load balancing | AWS Load Balancer Controller (NLB) | See tradeoffs — the legacy in-tree controller does not reliably support this EKS version |
+| TLS | cert-manager + Let's Encrypt | Free, auto-renewing certs, DNS-01 challenge via Route53 |
+| DNS | external-dns + Route53 | Ingress changes automatically create/update DNS records |
+| IAM for pods | IRSA (IAM Roles for Service Accounts) | Least-privilege AWS access per component, no static credentials in-cluster |
+| GitOps | ArgoCD | Cluster state reconciled from Git |
+| CI/CD | GitHub Actions + OIDC | No long-lived AWS access keys stored as secrets |
+| Image scanning | Trivy | Vulnerability scanning of the built image before push |
+| IaC scanning | Checkov | Static analysis of Terraform for misconfigurations |
+| Registry | Amazon ECR | Private, IAM-authenticated registry integrated with EKS |
+| Monitoring | kube-prometheus-stack (Prometheus + Grafana + Alertmanager) | Cluster and workload metrics, pre-built dashboards |
+| App | [usememos/memos](https://github.com/usememos/memos) | Self-hosted note-taking app, SQLite-backed |
 
 ![Memos running on EKS](images/memos-application.png)
 
