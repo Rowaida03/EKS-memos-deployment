@@ -62,26 +62,34 @@ Then open http://localhost:5230 and create the admin account.
 
 
 ## Repository layout
+
+```
 .
 ├── .github/workflows/
-│   ├── terraform.yml              # Pipeline 1: validate, scan, plan, apply infra
+│   ├── terraform.yml              # Pipeline 1: scan, validate, plan, apply infra
 │   └── build-deploy-ecr.yaml      # Pipeline 2: build, scan, push image, deploy
-├── infra/                          # Terraform root module
+├── infra/                         # Terraform root module
 │   ├── vpc.tf
 │   ├── eks.tf
 │   ├── ecr.tf
 │   ├── irsa.tf                    # cert-manager / external-dns / LB controller IRSA roles
 │   ├── github-oidc.tf             # GitHub OIDC provider + CI role
 │   ├── helm-releases.tf           # Traefik, cert-manager, external-dns, ALB controller,
-│   │                               # ArgoCD, kube-prometheus-stack
+│   │                              # ArgoCD, kube-prometheus-stack
 │   ├── helm/                      # values.yaml files for each Helm release
-│   ├── locals.tf / backend.tf / providers.tf
-├── kubernetes/                     # Plain manifests, synced by ArgoCD
+│   ├── locals.tf
+│   ├── backend.tf
+│   └── providers.tf
+├── kubernetes/                    # Plain manifests, synced by ArgoCD
 │   ├── memos-deployment.yaml
+│   ├── memos-ingress.yaml
 │   ├── cluster-issuer.yaml
 │   └── argocd-app.yaml
-├── memos/                          # Application source (usememos/memos) + Dockerfile
-└── bootstrap/                      # One-time Terraform state backend (S3 + native locking)
+├── memos/                         # Application source (usememos/memos)
+├── bootstrap/                     # One-time Terraform state backend (S3 + native locking)
+├── images/                        # Diagrams and screenshots for this README
+└── dockerfile                     # Multi-stage build for the memos image
+```
 
 
 ![Memos running on EKS](images/memos-application.png)
