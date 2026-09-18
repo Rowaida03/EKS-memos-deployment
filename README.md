@@ -9,16 +9,16 @@ A production style deployment of memos, an open-source note taking application, 
 
 - [Running this locally](#running-this-locally)
 - [Architecture](#architecture-diagram)
-- Tech stack
-- Repository layout
-- Infrastructure 
-- Kubernetes add-ons
-- Application deployment
-- GitOps (ArgoCD)
-- CI/CD pipelines
-- Monitoring 
-- Key decisions and tradeoffs
-- Known limitations/ improvements to be made
+- [Tech stack](#tech-stack)
+- [Repository layout](#repository-layout)
+- [Infrastructure](#infrastructure-terraform)
+- [Kubernetes add-ons](#kubernetes-addons)
+- [Application deployment](#application-deployment)
+- [GitOps (ArgoCD)](#gitops-argocd)
+- [CI/CD pipelines](#cicd-pipelines)
+- [Monitoring](#monitoring)
+- [Key decisions and tradeoffs](#key-decisions--tradeoffs)
+- [Known limitations/ improvements to be made](#known-limitations-and-what-id-do-next)
 
 
 ## Running this locally
@@ -44,7 +44,7 @@ Then open http://localhost:5230 and create the admin account.
 **Request flow**: Browser→Route53(DNS)→NLB→Traefik Ingress→memos-svc→memos-deployment pods. TLS is terminated by traefik using a certificate issued by cert-manager via Let's Encrypt (DNS-01 challenge through Route53).
 
 
-### Tech Stack
+## Tech Stack
 
 | Layer | Tool | Why |
 |---|---|---|
@@ -94,15 +94,15 @@ Then open http://localhost:5230 and create the admin account.
 └── dockerfile                     # Multi-stage build for the memos image
 ```
 
-### Infrastructure (Terraform)
+## Infrastructure (Terraform)
 
-#### VPC
+### VPC
 
 - `Terraform-aws-modules/vpc/aws`, 3 AZs, public + private subnets.
 - Single NAT gateway - see tradeoffs below !!!!! make that underlined
 - Public subnets tagged `kubernetes.io/role/elb`, private tagged `kubernetes.io/role/internal-elb`, both tagged `kubernetes.io/cluster/<cluster-name>` - required for automatic load balancer subnet discovery. 
 
-#### EKS
+### EKS
 
 - `terraform-aws-modules/eks/aws v21`.
 - Cluster addons(`vpc-cni`, `coredns`, `kube-proxy`) installed via the module's `addons` block, with `vpc-cni` set to `before_compute = true` so networking exists before worker nodes try to join. Without this, nodes join but never report `Ready` (CNI never initialises).
@@ -110,11 +110,11 @@ Then open http://localhost:5230 and create the admin account.
 - `access_entries` grants CI/CD OIDC role cluster access.
 
 
-#### State backend 
+### State backend 
 
 - Bootstrapped separately (`bootstrap/`):S3 bucket with versioning and encryption, using Terraform's native s3 locking(`use_lockfile = true`) rather than a DynamoDB table. This was the simpler and more recent way to protect against concurrent applies. 
 
-#### CI/CD access(OIDC)
+### CI/CD access(OIDC)
 
 - GitHub Actions needs AWS permissions to push images to ECR, run `terraform apply`, and deploy to the cluster. The obvious way to do that is to generate an IAM access key and paste it into GitHub
 as a secret. But that means a long-lived credential sitting in a third-party system indefinitely, which is a real security liability: if it leaks, it stays valid until someone notices and revokes it.
@@ -124,7 +124,7 @@ as a secret. But that means a long-lived credential sitting in a third-party sys
 - The workflow hands that token to AWS STS, which verifies the signature, checks it against the role's trust conditions, and if it matches returns temporary credentials valid for that run only.
 
 
-### Kubernetes addons
+## Kubernetes addons
 
 All installed as Terraform helm_release resources so infra and addons are provisioned together and tracked in the same state.
 
