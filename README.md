@@ -97,10 +97,44 @@ Then open http://localhost:5230 and create the admin account.
 
 #### VPC
 
-- terraform-aws-modules/vpc/aws, 3 AZs, public + private subnets.
+- Terraform-aws-modules/vpc/aws, 3 AZs, public + private subnets.
 - Single NAT gateway - see tradeoffs below !!!!! make that underlined
 - Public subnets tagged `kubernetes.io/role/elb`, private tagged `kubernetes.io/role/internal-elb`, both tagged `kubernetes.io/cluster/<cluster-name>` - required for automatic load balancer subnet discovery. 
 
+#### EKS
+
+- `terraform-aws-modules/eks/aws v21`.
+- Cluster addons(`vpc-cni`, `coredns`, `kube-proxy`) installed via the module's `addons` block, with `vpc-cni` set to `before_compute = true` so networking exists before worker nodes try to join. Without this, nodes join but never report `Ready` (CNI never initialises).
+- A single managed node group. Instance type was iterated on during development (see tradeoffs) and settled on `m7i-flex.large`.
+- `access_entries` grants CI/CD OIDC role cluster access.
+
+
+#### State backend 
+
+- Bootstrapped separately (`bootstrap/`):S3 bucket with versioning and encryption, using Terraform's native s3 locking(`use_lockfile = true`) rather than a DynamoDB table. This was the simpler and more recent way to protect against concurrent applies. 
+
+#### CI/CD access(OIDC)
+
+- GitHub Actions needs AWS permissions to push images to ECR, run `terraform apply`, and deploy to the cluster. The obvious way to do that is to generate an IAM access key and paste it into GitHub
+as a secret. But that means a long-lived credential sitting in a third-party system indefinitely, which is a real security liability: if it leaks, it stays valid until someone notices and revokes it.
+- GitHub is registered in AWS IAM as an OpenID Connect identity provider (`github-oidc.tf`).
+- An IAM role (`github-ecr-pusher`) trusts that provider
+- When a workflow runs, GitHub mints a short-lived, signed token describing the run (which repo, which branch, which workflow file).
+- The workflow hands that token to AWS STS, which verifies the signature, checks it against the role's trust conditions, and if it matches returns temporary credentials valid for that run only.
+
+
+### Kubernetes addons
+
+All installed as Terraform helm_release resources so infra and addons are provisioned together and tracked in the same state.
+
+| Add-on | Namespace | IRSA? | Purpose |
+|---|---|---|---|
+| Traefik | `traefik` | No | Ingress controller, fronted by an NLB |
+| AWS Load Balancer Controller | `kube-system` | Yes | Provisions the NLB for Traefik's `LoadBalancer` Service |
+| cert-manager | `cert-manager` | Yes (Route53 scoped) | Issues/renews TLS certs via Let's Encrypt DNS-01 |
+| external-dns | `external-dns` | Yes (Route53 scoped) | Creates Route53 records from Ingress hosts |
+| ArgoCD | `argocd` | No | GitOps continuous delivery |
+| kube-prometheus-stack | `monitoring` | No | Prometheus, Grafana, Alertmanager |
 
 
 
