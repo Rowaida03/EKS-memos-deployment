@@ -22,7 +22,7 @@ A production style deployment of memos, an open-source note taking application, 
 
 
 ## Running this locally
-Everything in infra/ and kubernetes/ targets a real EKS cluster, but the app itself can be run entirely on your own machine with just Docker.
+Everything in `infra/` and `kubernetes/` targets a real EKS cluster, but the app itself can be run entirely on your own machine with just Docker.
 
 ### Option A - plain Docker
 ```
@@ -31,11 +31,24 @@ docker run -d --name memos -p 5230:5230 -v ~/.memos:/var/opt/memos
 ```
 Then open http://localhost:5230 and create the admin account.
 
- The -v flag persists your data in ~/.memos on your host, so it survives container restarts (unlike the ephemeral setup used on EKS in this project. See tradeoffs).  *****!!!make it tap
+ The -v flag persists your data in ~/.memos on your host, so it survives container restarts (unlike the ephemeral setup used on EKS in this project. [See tradeoffs](#key-decisions--tradeoffs)).
 
 ### Option B - Local Kubernetes (Kind, Minikube, Orbstack etc):
 
- INSERT THE RELEVANT CODE HERE !!!!!!
+```bash
+# Build the image
+docker build -t memos:v1 -f dockerfile .
+
+# If using kind specifically, load the image into the cluster
+# (OrbStack and Docker Desktop share your Docker daemon, so skip this step for those)
+kind load docker-image memos:v1
+
+# Deploy the app
+kubectl apply -f kubernetes/memos-deployment.yaml
+
+# Access it
+kubectl port-forward svc/memos-svc 8080:3456
+```
 
 ## Architecture diagram
 
@@ -179,7 +192,6 @@ The Helm chart `kube-prometheus-stack` provides Prometheus, Grafana, and Alertma
 ## Key decisions & tradeoffs
 
 Single NAT gateway instead of one per AZ. Cuts NAT costs however if that one AZ has an outage every private subnet loses outbound internet access. Acceptable for a project of this scope however a regional NAT gateway is the better choice.
-
 
 Plain manifests for memos, not a Helm chart. The app's own object set is small. Wrapping it in a Helm chart (templating,`values.yaml`, `chart.yaml`) would add packaging overhead and no real benefit at this scale. Helm was used for third party addons specifically because those ship dozens of interlocking objects.
 
