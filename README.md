@@ -8,7 +8,7 @@ A production style deployment of memos, an open-source note taking application, 
 ## Table of contents
 
 - [Running this locally](#running-this-locally)
-- Architecture 
+- [Architecture](#architecture-diagram)
 - Tech stack
 - Repository layout
 - Infrastructure 
@@ -37,7 +37,7 @@ Then open http://localhost:5230 and create the admin account.
 
  INSERT THE RELEVANT CODE HERE !!!!!!
 
-### Architecture diagram
+## Architecture diagram
 
 ![Architecture diagram](images/Memos_eks.drawio.png)
 
