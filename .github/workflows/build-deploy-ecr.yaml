@@ -3,6 +3,10 @@ name: Build, Scan, Push & Deploy
 on:
   push:
     branches: [ "master" ]
+    paths:
+      - 'memos/**'
+      - 'dockerfile'
+      - '.github/workflows/build-deploy-ecr.yaml'
   workflow_dispatch:
 
 permissions:
