@@ -1,9 +1,13 @@
-# EKS Deployment Project: memos on AWS
+# EKS Deployment Project: Memos on AWS
 
 A production style deployment of memos, an open-source note taking application, on Amazon EKS, built with Terraform, secured with IRSA, exposed via Traefik + the AWS Load Balancer Controller, automatically issued a TLS certificate via cert-manager, given a live domain via external-dns/Route53, deployed through GitOps with ArgoCD, and observed with Prometheus/Grafana. CI/CD is handled by two GitHub Actions pipelines using OIDC.
 
 ## Memos running on EKS
 ![Memos running on EKS](images/memos-application.png)
+
+### Why this project exists
+
+Built as a hands-on way to learn about EKS in production end-to-end by not just deploying an app, but provisioning, securing, and observing it the way a real team would.
 
 ## Table of contents
 
@@ -25,7 +29,7 @@ A production style deployment of memos, an open-source note taking application, 
 Everything in `infra/` and `kubernetes/` targets a real EKS cluster, but the app itself can be run entirely on your own machine with just Docker.
 
 ### Option A - plain Docker
-```
+```bash
 docker build -t memos-local -f Dockerfile .
 docker run -d --name memos -p 5230:5230 -v ~/.memos:/var/opt/memos
 ```
@@ -82,7 +86,7 @@ kubectl port-forward svc/memos-svc 8080:3456
 ```
 .
 ├── .github/workflows/
-│   ├── terraform.yml              # Pipeline 1: scan, validate, plan, apply infra
+│   ├── terraform.yaml              # Pipeline 1: scan, validate, plan, apply infra
 │   └── build-deploy-ecr.yaml      # Pipeline 2: build, scan, push image, deploy
 ├── infra/                         # Terraform root module
 │   ├── vpc.tf
@@ -112,22 +116,22 @@ kubectl port-forward svc/memos-svc 8080:3456
 ### VPC
 
 - `Terraform-aws-modules/vpc/aws`, 3 AZs, public + private subnets.
-- Single NAT gateway - see tradeoffs below !!!!! make that underlined
-- Public subnets tagged `kubernetes.io/role/elb`, private tagged `kubernetes.io/role/internal-elb`, both tagged `kubernetes.io/cluster/<cluster-name>` - required for automatic load balancer subnet discovery. 
+- Single NAT gateway - see [tradeoffs](#key-decisions--tradeoffs) below.
+- Public subnets tagged `kubernetes.io/role/elb`, private tagged `kubernetes.io/role/internal-elb`, both tagged `kubernetes.io/cluster/<cluster-name>` which is required for automatic load balancer subnet identification. 
 
 ### EKS
 
 - `terraform-aws-modules/eks/aws v21`.
 - Cluster addons(`vpc-cni`, `coredns`, `kube-proxy`) installed via the module's `addons` block, with `vpc-cni` set to `before_compute = true` so networking exists before worker nodes try to join. Without this, nodes join but never report `Ready` (CNI never initialises).
-- A single managed node group. Instance type was iterated on during development (see tradeoffs) and settled on `m7i-flex.large`.
+- A single managed node group. Instance type was iterated on during development ([see tradeoffs](#key-decisions--tradeoffs)) and settled on `m7i-flex.large`.
 - `access_entries` grants CI/CD OIDC role cluster access.
 
 
 ### State backend 
 
-- Bootstrapped separately (`bootstrap/`):S3 bucket with versioning and encryption, using Terraform's native s3 locking(`use_lockfile = true`) rather than a DynamoDB table. This was the simpler and more recent way to protect against concurrent applies. 
+- Bootstrapped separately (`bootstrap/`): S3 bucket with versioning and encryption, using Terraform's native s3 locking(`use_lockfile = true`) rather than a DynamoDB table. This was the simpler and more modern alternative to protect against concurrent applies. 
 
-### CI/CD access(OIDC)
+### CI/CD access (OIDC)
 
 - GitHub Actions needs AWS permissions to push images to ECR, run `terraform apply`, and deploy to the cluster. The obvious way to do that is to generate an IAM access key and paste it into GitHub
 as a secret. But that means a long-lived credential sitting in a third-party system indefinitely, which is a real security liability: if it leaks, it stays valid until someone notices and revokes it.
@@ -151,20 +155,33 @@ All installed as Terraform helm_release resources so infra and addons are provis
 | kube-prometheus-stack | `monitoring` | No | Prometheus, Grafana, Alertmanager |
 
 ### Application deployment 
-Memos is deployed as plain Kubernetes manifests (Deployment, Service,Ingress), not a Helm chart. A delibrate choice i made. See !!tradeoffs!!!. The image is built from the app's mult-stage dockerfile (Go backend + React frontend), pushed to ECR, and referenced directly in the deployment.
+Memos is deployed as plain Kubernetes manifests (Deployment, Service,Ingress), not a Helm chart. A deliberate choice I made. See [tradeoffs](#key-decisions--tradeoffs). The image is built from the app's multi-stage Dockerfile (Go backend + React frontend), pushed to ECR, and referenced directly in the deployment.
 
 The `Ingress` carries `cert-manager.io/cluster-issuer` line, which triggers automatic certificate issuance the moment it's applied, and a `host:` field that external-dns watches to create the matching Route53 record. No manual DNS or certificate steps required once Ingress is applied.
 
 
 ### GitOps (ArgoCD)
 
-An ArgoCD `Application` object (`kubernetes/argocd-app.yaml`) points at the `kubernetes/` folder in this repo. ArgoCD reconciles the live cluster state to match what's commited to Git. This ensures that Git becomes the single source of truth. 
+An ArgoCD `Application` object (`kubernetes/argocd-app.yaml`) points at the `kubernetes/` folder in this repo. ArgoCD reconciles the live cluster state to match what's committed to Git. This ensures that Git becomes the single source of truth. 
 
 Prune and self heal is also enabled and automatic synchronisation between cluster and Git. 
 
+![ArgoCD](images/argocd-health.png)
+
 ### CI/CD pipelines
 
-#### Pipeline 1 - `build-deploy-ecr.yaml`
+#### Pipeline 1 - `terraform.yaml`
+
+Runs on changes under `infra/`:
+
+1. Checkout
+2. Checkov scan of the terraform code
+3. Authenticate to AWS via OIDC
+4. `terraform init`➔`validate`➔`plan`➔`apply`
+
+![Terraform workflow](images/terraform-workflow.png)
+
+#### Pipeline 2 - `build-deploy-ecr.yaml`
 
 Runs on push to `master` (plus a manual dispatch feature):
 
@@ -176,18 +193,13 @@ Runs on push to `master` (plus a manual dispatch feature):
 6. Push the image to ECR
 7. Update the running Deployment's image and wait for rollout
 
-#### Pipleine 2 - `terraform.yaml`
-
-Runs on changes under `infra/`:
-
-1. Checkout
-2. Checkov scan of the terraform code
-3. Authenticate to AWS via OIDC
-4. `terraform init`➔`validate`➔`plan`➔`apply`
+![Build and Push Workflow](images/build-scan-push-workflow.png)
 
 ### Monitoring
 
 The Helm chart `kube-prometheus-stack` provides Prometheus, Grafana, and Alertmanager with pre-built dashboards.
+
+![Grafana](images/grafana-metrics.png)
 
 ## Key decisions & tradeoffs
 
@@ -199,24 +211,11 @@ No persistent storage for memos. memos stores data in a local SQLite file inside
 
 Instance type: t2/t3.micro → t3.small → m7i-flex.large. Started on free-tier-eligible micro instances (an account-level vCPU restriction blocked larger types initially). Micro instances have a very low per-node pod/ENI ceiling. Running memos, cert-manager, external-dns, Traefik, the LB controller, ArgoCD, and Prometheus/Grafana together repeatedly hit "too many pods" scheduling failures well before any CPU/memory limit was reached. Moving to m7i-flex.large (fewer, larger nodes) fixed this directly and also reduced total node-group churn.
 
-### Known limitations and what Id do next
+### Known limitations and what I'd do next
 
 - Add EFS-backed persistent storage
-- Add a `kubeconform`/manifest-liniting step to catch YAML errors before ArgoCD attempts a sync.
+- Add a `kubeconform`/manifest-linting step to catch YAML errors before ArgoCD attempts a sync.
 - Correct the node group size further now that the workload set is stable. (Current sizing was chosen empirically while debugging) 
-
-
-
-# Workflows
-
-![Terraform workflow](images/terraform-workflow.png)
-
-![Build and Push Workflow](images/build-scan-push-workflow.png)
-
-# Dashboards
-
-![ArgoCD](images/argocd-health.png)
-
-![Grafana](images/grafana-metrics.png)
+- Reprovision the NAT setup using AWS's Regional NAT Gateway instead of a single zonal one. It removes the AZ outage single point of failure this project currently accepts, without reintroducing the cost/complexity of one NAT Gateway per AZ.
 
 
