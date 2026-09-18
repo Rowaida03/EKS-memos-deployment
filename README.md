@@ -9,6 +9,8 @@ A production style deployment of memos, an open-source note taking application, 
 
 Built as a hands-on way to learn about EKS in production end-to-end by not just deploying an app, but provisioning, securing, and observing it the way a real team would.
 
+> **Note:** the live deployment has been taken down to avoid ongoing AWS costs now that the project is complete. Screenshots throughout this README (the running app, ArgoCD sync status, Grafana dashboards, and successful CI/CD pipeline runs) serve as proof of a fully working deployment. Some commits after teardown show failing CI checks — this is expected, since the app pipeline's final step deploys to a cluster that no longer exists.
+
 ## Table of contents
 
 - [Running this locally](#running-this-locally)
